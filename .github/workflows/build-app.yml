@@ -1,4 +1,5 @@
 name: Build Android App
+
 on:
   repository_dispatch:
     types: [build-app-request]
@@ -27,7 +28,7 @@ jobs:
       - name: Create Android project
         run: |
           mkdir -p app/src/main
-          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          cat > app/src/main/AndroidManifest.xml << EOF
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="${{ github.event.client_payload.packageName }}">
@@ -49,87 +50,85 @@ jobs:
                       </intent-filter>
                   </activity>
                   
-                  ${{ github.event.client_payload.hasAds && '<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="' || '' }}${{ github.event.client_payload.hasAds && github.event.client_payload.adConfig.appId || '' }}${{ github.event.client_payload.hasAds && '"/>' || '' }}
+                  ${AD_APP_META}
               </application>
           </manifest>
           EOF
+        env:
+          AD_APP_META: ${{ github.event.client_payload.hasAds && '<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="' || '' }}${{ github.event.client_payload.hasAds && github.event.client_payload.adConfig.appId || '' }}${{ github.event.client_payload.hasAds && '"/>' || '' }}
 
       - name: Create MainActivity
         run: |
-          mkdir -p app/src/main/java/${{ github.event.client_payload.packageName.replace('.', '/') }}
-          cat > app/src/main/java/${{ github.event.client_payload.packageName.replace('.', '/') }}/MainActivity.java << 'EOF'
+          PACKAGE_PATH=$(echo "${{ github.event.client_payload.packageName }}" | tr '.' '/')
+          mkdir -p app/src/main/java/$PACKAGE_PATH
+          cat > app/src/main/java/$PACKAGE_PATH/MainActivity.java << EOF
           package ${{ github.event.client_payload.packageName }};
-
           import android.os.Bundle;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
           import androidx.appcompat.app.AppCompatActivity;
           ${{ github.event.client_payload.hasAds && 'import com.google.android.gms.ads.*;' || '' }}
-
           public class MainActivity extends AppCompatActivity {
               private WebView webView;
               ${{ github.event.client_payload.hasAds && 'private AdView adView;' || '' }}
-
               @Override
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
                   setContentView(R.layout.activity_main);
-
                   webView = findViewById(R.id.webview);
                   webView.getSettings().setJavaScriptEnabled(true);
                   webView.setWebViewClient(new WebViewClient());
                   webView.loadUrl("file:///android_asset/website/index.html");
-
-                  ${{ github.event.client_payload.hasAds && `
-                  MobileAds.initialize(this);
-                  adView = findViewById(R.id.adView);
-                  AdRequest adRequest = new AdRequest.Builder().build();
-                  adView.loadAd(adRequest);
-                  ` || '' }}
+                  ${AD_VIEW_CODE}
               }
           }
           EOF
+        env:
+          AD_VIEW_CODE: ${{ github.event.client_payload.hasAds && '
+          MobileAds.initialize(this);
+          adView = findViewById(R.id.adView);
+          AdRequest adRequest = new AdRequest.Builder().build();
+          adView.loadAd(adRequest);
+          ' || '' }}
 
       - name: Create layout
         run: |
-          mkdir -p app/src/main/res/layout
-          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
+          if ${{ github.event.client_payload.hasAds }}; then
+            AD_VIEW='<com.google.android.gms.ads.AdView
+                android:id="@+id/adView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_alignParentBottom="true"
+                ads:adSize="BANNER"
+                ads:adUnitId="'${{ github.event.client_payload.adConfig.bannerAdId }}'" />'
+          else
+            AD_VIEW=''
+          fi
+          cat > app/src/main/res/layout/activity_main.xml << EOF
           <?xml version="1.0" encoding="utf-8"?>
           <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
               xmlns:ads="http://schemas.android.com/apk/res-auto"
               android:layout_width="match_parent"
               android:layout_height="match_parent">
-
               <WebView
                   android:id="@+id/webview"
                   android:layout_width="match_parent"
                   android:layout_height="match_parent"
-                  ${{ github.event.client_payload.hasAds && 'android:layout_above="@+id/adView"' || '' }} />
-
-              ${{ github.event.client_payload.hasAds && `
-              <com.google.android.gms.ads.AdView
-                  android:id="@+id/adView"
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:layout_alignParentBottom="true"
-                  ads:adSize="BANNER"
-                  ads:adUnitId="${github.event.client_payload.adConfig.bannerAdId}" />
-              ` || '' }}
+                  ${AD_VIEW:+android:layout_above="@+id/adView"} />
+              ${AD_VIEW}
           </RelativeLayout>
           EOF
 
       - name: Set up Gradle
         run: |
           mkdir -p app
-          cat > app/build.gradle << 'EOF'
+          cat > app/build.gradle << EOF
           plugins {
               id 'com.android.application'
           }
-
           android {
               namespace '${{ github.event.client_payload.packageName }}'
               compileSdk 34
-
               defaultConfig {
                   applicationId "${{ github.event.client_payload.packageName }}"
                   minSdk 24
@@ -137,7 +136,6 @@ jobs:
                   versionCode 1
                   versionName "1.0"
               }
-
               buildTypes {
                   release {
                       minifyEnabled true
@@ -145,14 +143,12 @@ jobs:
                   }
               }
           }
-
           dependencies {
               implementation 'androidx.appcompat:appcompat:1.6.1'
               ${{ github.event.client_payload.hasAds && "implementation 'com.google.android.gms:play-services-ads:22.6.0'" || '' }}
           }
           EOF
-
-          cat > build.gradle << 'EOF'
+          cat > build.gradle << EOF
           buildscript {
               repositories {
                   google()
@@ -162,7 +158,6 @@ jobs:
                   classpath 'com.android.tools.build:gradle:8.2.0'
               }
           }
-
           allprojects {
               repositories {
                   google()
@@ -170,8 +165,7 @@ jobs:
               }
           }
           EOF
-
-          cat > settings.gradle << 'EOF'
+          cat > settings.gradle << EOF
           include ':app'
           EOF
 
