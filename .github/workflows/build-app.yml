@@ -199,4 +199,3 @@ jobs:
         with:
           name: android-app
           path: ${{ github.event.client_payload.appName }}.${{ github.event.client_payload.buildType == 'AAB' && 'aab' || 'apk' }}
-       
