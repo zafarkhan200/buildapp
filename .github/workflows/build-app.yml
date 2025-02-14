@@ -1,49 +1,207 @@
 name: Build Android App
 on:
   repository_dispatch:
-    types: [build-app]
+    types: [build-app-request]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Set up JDK
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v3
         with:
-          java-version: '11'
-          distribution: 'adopt'
-          
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.x'
-          
-      - name: Get dependencies
-        run: flutter pub get
-        
-      - name: Build APK/AAB
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Download website content
+        run: |
+          mkdir -p app/src/main/assets
+          wget -mkEpnp ${{ github.event.client_payload.websiteUrl }} -P app/src/main/assets/website
+
+      - name: Create Android project
+        run: |
+          mkdir -p app/src/main
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="${{ github.event.client_payload.packageName }}">
+              
+              <uses-permission android:name="android.permission.INTERNET" />
+              
+              <application
+                  android:allowBackup="true"
+                  android:icon="@mipmap/ic_launcher"
+                  android:label="${{ github.event.client_payload.appName }}"
+                  android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+                  
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+                  
+                  ${{ github.event.client_payload.hasAds && '<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="' || '' }}${{ github.event.client_payload.hasAds && github.event.client_payload.adConfig.appId || '' }}${{ github.event.client_payload.hasAds && '"/>' || '' }}
+              </application>
+          </manifest>
+          EOF
+
+      - name: Create MainActivity
+        run: |
+          mkdir -p app/src/main/java/${{ github.event.client_payload.packageName.replace('.', '/') }}
+          cat > app/src/main/java/${{ github.event.client_payload.packageName.replace('.', '/') }}/MainActivity.java << 'EOF'
+          package ${{ github.event.client_payload.packageName }};
+
+          import android.os.Bundle;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import androidx.appcompat.app.AppCompatActivity;
+          ${{ github.event.client_payload.hasAds && 'import com.google.android.gms.ads.*;' || '' }}
+
+          public class MainActivity extends AppCompatActivity {
+              private WebView webView;
+              ${{ github.event.client_payload.hasAds && 'private AdView adView;' || '' }}
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  setContentView(R.layout.activity_main);
+
+                  webView = findViewById(R.id.webview);
+                  webView.getSettings().setJavaScriptEnabled(true);
+                  webView.setWebViewClient(new WebViewClient());
+                  webView.loadUrl("file:///android_asset/website/index.html");
+
+                  ${{ github.event.client_payload.hasAds && `
+                  MobileAds.initialize(this);
+                  adView = findViewById(R.id.adView);
+                  AdRequest adRequest = new AdRequest.Builder().build();
+                  adView.loadAd(adRequest);
+                  ` || '' }}
+              }
+          }
+          EOF
+
+      - name: Create layout
+        run: |
+          mkdir -p app/src/main/res/layout
+          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:ads="http://schemas.android.com/apk/res-auto"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent">
+
+              <WebView
+                  android:id="@+id/webview"
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+                  ${{ github.event.client_payload.hasAds && 'android:layout_above="@+id/adView"' || '' }} />
+
+              ${{ github.event.client_payload.hasAds && `
+              <com.google.android.gms.ads.AdView
+                  android:id="@+id/adView"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:layout_alignParentBottom="true"
+                  ads:adSize="BANNER"
+                  ads:adUnitId="${github.event.client_payload.adConfig.bannerAdId}" />
+              ` || '' }}
+          </RelativeLayout>
+          EOF
+
+      - name: Set up Gradle
+        run: |
+          mkdir -p app
+          cat > app/build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace '${{ github.event.client_payload.packageName }}'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "${{ github.event.client_payload.packageName }}"
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              buildTypes {
+                  release {
+                      minifyEnabled true
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              ${{ github.event.client_payload.hasAds && "implementation 'com.google.android.gms:play-services-ads:22.6.0'" || '' }}
+          }
+          EOF
+
+          cat > build.gradle << 'EOF'
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.2.0'
+              }
+          }
+
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          EOF
+
+          cat > settings.gradle << 'EOF'
+          include ':app'
+          EOF
+
+      - name: Process app icon
+        if: ${{ github.event.client_payload.icon }}
+        run: |
+          echo "${{ github.event.client_payload.icon }}" | base64 -d > icon.png
+          mkdir -p app/src/main/res/mipmap-xxxhdpi
+          convert icon.png -resize 192x192 app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          mkdir -p app/src/main/res/mipmap-xxhdpi
+          convert icon.png -resize 144x144 app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          mkdir -p app/src/main/res/mipmap-xhdpi
+          convert icon.png -resize 96x96 app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          mkdir -p app/src/main/res/mipmap-hdpi
+          convert icon.png -resize 72x72 app/src/main/res/mipmap-hdpi/ic_launcher.png
+          mkdir -p app/src/main/res/mipmap-mdpi
+          convert icon.png -resize 48x48 app/src/main/res/mipmap-mdpi/ic_launcher.png
+
+      - name: Build ${{ github.event.client_payload.buildType }}
         run: |
           if [ "${{ github.event.client_payload.buildType }}" = "AAB" ]; then
-            flutter build appbundle
+            ./gradlew bundleRelease
+            mv app/build/outputs/bundle/release/app-release.aab ${{ github.event.client_payload.appName }}.aab
           else
-            flutter build apk
+            ./gradlew assembleRelease
+            mv app/build/outputs/apk/release/app-release.apk ${{ github.event.client_payload.appName }}.apk
           fi
-          
-      - name: Upload artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: app-release
-          path: |
-            build/app/outputs/flutter-apk/*.apk
-            build/app/outputs/bundle/release/*.aab
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
         with:
-          files: |
-            build/app/outputs/flutter-apk/*.apk
-            build/app/outputs/bundle/release/*.aab
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: android-app
+          path: ${{ github.event.client_payload.appName }}.${{ github.event.client_payload.buildType == 'AAB' && 'aab' || 'apk' }}
