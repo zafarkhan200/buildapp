@@ -55,7 +55,7 @@ jobs:
           </manifest>
           EOF
         env:
-          AD_APP_META: ${{ github.event.client_payload.hasAds && '<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="' || '' }}${{ github.event.client_payload.hasAds && github.event.client_payload.adConfig.appId || '' }}${{ github.event.client_payload.hasAds && '"/>' || '' }}
+          AD_APP_META: ${{ github.event.client_payload.hasAds && '<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="' || '' }}${{ github.event.client_payload.hasAds && github.event.client_payload.adConfig.applicationId || '' }}${{ github.event.client_payload.hasAds && '" />' || '' }}
 
       - name: Create MainActivity
         run: |
@@ -199,3 +199,4 @@ jobs:
         with:
           name: android-app
           path: ${{ github.event.client_payload.appName }}.${{ github.event.client_payload.buildType == 'AAB' && 'aab' || 'apk' }}
+       
