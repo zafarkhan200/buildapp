@@ -93,6 +93,7 @@ jobs:
 
       - name: Create layout
         run: |
+          mkdir -p app/src/main/res/layout
           if ${{ github.event.client_payload.hasAds }}; then
             AD_VIEW='<com.google.android.gms.ads.AdView
                 android:id="@+id/adView"
@@ -194,8 +195,10 @@ jobs:
             mv app/build/outputs/apk/release/app-release.apk ${{ github.event.client_payload.appName }}.apk
           fi
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v3
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: android-app
-          path: ${{ github.event.client_payload.appName }}.${{ github.event.client_payload.buildType == 'AAB' && 'aab' || 'apk' }}
+          files: ${{ github.event.client_payload.appName }}.${{ github.event.client_payload.buildType == 'AAB' && 'aab' || 'apk' }}
+          tag_name: v1.0.0-${{ github.run_number }}
+          draft: false
+          token: ${{ secrets.GITHUB_TOKEN }}
