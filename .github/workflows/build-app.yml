@@ -79,10 +79,17 @@ jobs:
                   webView.getSettings().setJavaScriptEnabled(true);
                   webView.setWebViewClient(new WebViewClient());
                   webView.loadUrl("file:///android_asset/website/index.html");
-                  ${AD_VIEW_CODE}
+                  ${{ github.event.client_payload.hasAds && '
+                  MobileAds.initialize(this);
+                  adView = findViewById(R.id.adView);
+                  AdRequest adRequest = new AdRequest.Builder().build();
+                  adView.loadAd(adRequest);
+                  ' || '' }}
               }
           }
           EOF
+
+      
         env:
           AD_VIEW_CODE: ${{ github.event.client_payload.hasAds && '
           MobileAds.initialize(this);
