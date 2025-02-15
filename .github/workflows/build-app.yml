@@ -56,7 +56,16 @@ jobs:
           # Make gradlew executable
           chmod +x gradlew
 
-      # Rest of the steps remain the same
+      - name: Create gradle.properties
+        run: |
+          mkdir -p app
+          cat > gradle.properties << EOF
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.nonTransitiveRClass=true
+          EOF
+
       - name: Download website content
         run: |
           mkdir -p app/src/main/assets
@@ -94,7 +103,6 @@ jobs:
         env:
           AD_APP_META: ${{ github.event.client_payload.hasAds && '<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="' || '' }}${{ github.event.client_payload.hasAds && github.event.client_payload.adConfig.applicationId || '' }}${{ github.event.client_payload.hasAds && '" />' || '' }}
 
-     
       - name: Create MainActivity
         run: |
           PACKAGE_PATH=$(echo "${{ github.event.client_payload.packageName }}" | tr '.' '/')
@@ -178,6 +186,10 @@ jobs:
                       minifyEnabled true
                       proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
                   }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
               }
           }
           dependencies {
