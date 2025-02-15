@@ -89,9 +89,6 @@ jobs:
           }
           EOF
 
-      
-       
-
       - name: Create layout
         run: |
           mkdir -p app/src/main/res/layout
@@ -147,7 +144,7 @@ jobs:
           }
           dependencies {
               implementation 'androidx.appcompat:appcompat:1.6.1'
-              ${{ github.event.client_payload.hasAds && "implementation 'com.google.android.gms:play-services-ads:22.6.0'" || '' }}
+              ${{ github.event.client_payload.hasAds && 'implementation "com.google.android.gms:play-services-ads:22.6.0"' || '' }}
           }
           EOF
           cat > build.gradle << EOF
