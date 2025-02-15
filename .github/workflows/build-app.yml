@@ -90,13 +90,7 @@ jobs:
           EOF
 
       
-        env:
-          AD_VIEW_CODE: ${{ github.event.client_payload.hasAds && '
-          MobileAds.initialize(this);
-          adView = findViewById(R.id.adView);
-          AdRequest adRequest = new AdRequest.Builder().build();
-          adView.loadAd(adRequest);
-          ' || '' }}
+       
 
       - name: Create layout
         run: |
