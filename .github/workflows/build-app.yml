@@ -218,19 +218,21 @@ jobs:
           include ':app'
           EOF
 
-      - name: Process app icon
-        if: ${{ github.event.client_payload.icon }}
+       - name: Process app icon
         run: |
-          echo "${{ github.event.client_payload.icon }}" | base64 -d > icon.png
-          mkdir -p app/src/main/res/mipmap-xxxhdpi
+          mkdir -p app/src/main/res/mipmap-xxxhdpi app/src/main/res/mipmap-xxhdpi app/src/main/res/mipmap-xhdpi app/src/main/res/mipmap-hdpi app/src/main/res/mipmap-mdpi
+          
+          if ${{ github.event.client_payload.icon }}; then
+            echo "${{ github.event.client_payload.icon }}" | base64 -d > icon.png
+          else
+            # Create a default icon if none provided
+            convert -size 512x512 xc:white -fill black -draw "circle 256,256 256,128" icon.png
+          fi
+          
           convert icon.png -resize 192x192 app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-          mkdir -p app/src/main/res/mipmap-xxhdpi
           convert icon.png -resize 144x144 app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          mkdir -p app/src/main/res/mipmap-xhdpi
           convert icon.png -resize 96x96 app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          mkdir -p app/src/main/res/mipmap-hdpi
           convert icon.png -resize 72x72 app/src/main/res/mipmap-hdpi/ic_launcher.png
-          mkdir -p app/src/main/res/mipmap-mdpi
           convert icon.png -resize 48x48 app/src/main/res/mipmap-mdpi/ic_launcher.png
 
       - name: Build ${{ github.event.client_payload.buildType }}
